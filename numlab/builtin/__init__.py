@@ -6,7 +6,7 @@ from numlab.builtin.nl_generator import nl_generator
 from numlab.builtin.nl_int import nl_int
 from numlab.builtin.nl_list import nl_list
 from numlab.builtin.nl_object import nl_object
-from numlab.builtin.nl_set import nl_set
+# from numlab.builtin.nl_set import nl_set
 from numlab.builtin.nl_slice import nl_slice
 from numlab.builtin.nl_str import nl_str
 from numlab.builtin.nl_tuple import nl_tuple

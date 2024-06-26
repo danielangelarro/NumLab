@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from functools import wraps
 from typing import Any, Callable, Dict, List
+from numlab.extended754 import efloat
 
 
 class Type:
@@ -21,6 +23,25 @@ class Type:
             return func
 
         return method_wrapper
+
+    def normalize(self):
+        def normalize_wrapper(func):
+            @wraps(func)
+            def wrapper(param1: Instance, param2: Instance, *args, **kwargs):
+                if isinstance(param1.get("value"), efloat) and isinstance(param2.get("value"), efloat):
+                    return func(param1, param2)
+
+                if isinstance(param1.get("value"), efloat):
+                    value = param1.get("value").arithm_ref(str(param2.get("value")), 10)
+                    param2 = Instance(self.get("float"))
+                    param2.set("value", value)
+                elif isinstance(param2.get("value"), efloat):
+                    value = param2.get("value").arithm_ref(str(param1.get("value")), 10)
+                    param1 = Instance(self.get("float"))
+                    param1.set("value", value)
+                return func(param1, param2)
+            return wrapper
+        return normalize_wrapper
 
     def get_attribute(self, attribute_name: str):
         for attribute in self.attributes:
@@ -68,7 +89,7 @@ class Type:
             return Type.get("bool")
         if isinstance(value, int):
             return Type.get("int")
-        if isinstance(value, float):
+        if isinstance(value, efloat):
             return Type.get("float")
         if value is None:
             return Type.get("none")
