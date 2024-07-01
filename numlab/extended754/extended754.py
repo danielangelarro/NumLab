@@ -106,6 +106,82 @@ class efloat:
         return abs(self.exponent) == self.arithm_ref.exp_bias + 1 and get_number(self.mantissa,
                                                                                  self.arithm_ref.base) == 0
 
+    def __abs__(self):
+        x = self.convert_int(self.arithm_ref.repr_base)
+        return self.convert_efloat(abs(x))
+
+    @nan_protect
+    def __round__(self, other: "efloat"):
+        """
+        Rounds the efloat to n decimal places.
+
+        :param other: Number of decimal places to round to. Defaults to 0.
+        :return: A new efloat instance rounded to n decimal places.
+        """
+        if self.isNaN or self.isINF or self.isZero:
+            return self.copy()
+
+        n = other.convert_int(10)
+
+        adjusted_number = [e for e in self.convert_str(self.arithm_ref.repr_base)]
+        dot_index = adjusted_number.index('.')
+        int_part = adjusted_number[:dot_index]
+        float_part = adjusted_number[dot_index + 1: dot_index + n + self.arithm_ref.round_extra_places + 1]
+        float_extra = float_part[n:]
+        float_part_reduce = float_part[:n]
+
+        if dot_index == -1 or len(float_part) <= n:
+            return self
+
+        if not float_part:
+            return self.convert_efloat(int_part)
+
+        ac, middle = 0, self.arithm_ref.repr_base // 2
+        while float_extra:
+            last_number = self.arithm_ref.char_map.index(float_extra[-1]) + ac
+            ac = last_number // middle
+            float_extra.pop()
+
+        index = len(float_part_reduce) - 1
+        while ac > 0 and index >= 0:
+            index_last = self.arithm_ref.char_map.index(float_part_reduce[index]) + ac
+            ac = index_last // middle
+            index_last %= self.arithm_ref.repr_base
+            float_part_reduce[index] = self.arithm_ref.char_map[index_last]
+            index -= 1
+
+        sign = int_part[0] if int_part[0] in ('-', '+') else ""
+
+        if sign != '':
+            int_part = int_part[1:]
+
+        index = len(int_part) - 1
+        while ac > 0 and index >= 0:
+            index_last = self.arithm_ref.char_map.index(int_part[index]) + ac
+            ac = index_last // middle
+            index_last %= self.arithm_ref.repr_base
+            int_part[index] = self.arithm_ref.char_map[index_last]
+            index -= 1
+
+        if ac > 0:
+            int_part = ["1"] + int_part
+
+        number = sign + "".join(int_part) + "." + "".join(float_part_reduce)
+        return self.convert_efloat(number)
+
+    def __floor__(self):
+        return self // self.convert_efloat(1)
+
+    def __ceil__(self):
+        _1 = self.convert_efloat("1")
+
+        floor = self // _1
+
+        if self > floor:
+            return (self + _1) // _1
+
+        return floor
+
     def copy(self) -> "efloat":
         """
         :return: A shallow copy of current efloat
@@ -245,7 +321,7 @@ class efloat:
         res = self * y_n
         return res
 
-    def __pow__(self, power):
+    def __pow__(self, power, module: "efloat" = None):
 
         result = efloat(self.arithm_ref, 1, 0, [1] + [0] * (self.arithm_ref.mantissa_len - 1))
 
@@ -255,10 +331,66 @@ class efloat:
         while power > 0:
             if power % 2 == 1:
                 result *= self
+                if module:
+                    result %= module
             self *= self
+            if module:
+                self %= module
+
             power //= 2
 
         return result
+
+    @property
+    def factorial(self):
+        result: efloat = self.convert_efloat(1)
+        i: efloat = self.convert_efloat(2)
+        _1 = self.convert_efloat(1, repr_base=10)
+
+        while i <= self:
+            result *= i
+            i += _1
+
+        return result
+
+    @property
+    def sin(self):
+
+        x = self.copy()
+        _1 = self.convert_efloat(1, repr_base=10)
+        _2 = self.convert_efloat(2, repr_base=10)
+
+        seno_aproximado: efloat = self.arithm_ref.pZero
+
+        for i in range(10):
+            _i = self.convert_efloat(i, repr_base=10)
+            fact = (_2 * _i + _1).factorial
+            termino = ((-_1) ** _i) * (x ** (_2 * _i + _1)) / fact
+            seno_aproximado += termino
+
+        seno_aproximado_str: str = seno_aproximado.convert_str(10)
+        return self.convert_efloat(seno_aproximado_str)
+
+    @property
+    def cos(self):
+        x = self.copy()
+        _1 = self.convert_efloat(1, repr_base=10)
+        _2 = self.convert_efloat(2, repr_base=10)
+
+        cos_aproximado: efloat = self.arithm_ref.pZero
+
+        for i in range(10):
+            _i = self.convert_efloat(i, repr_base=10)
+            fact = (_2 * _i).factorial
+            termino = ((-_1) ** _i) * (x ** (_2 * _i)) / fact
+            cos_aproximado += termino
+
+        cos_aproximado_str: str = cos_aproximado.convert_str(10)
+        return self.convert_efloat(cos_aproximado_str)
+
+    @property
+    def tan(self):
+        return self.sin / self.cos
 
     @nan_protect
     def __mod__(self, other: "efloat"):
@@ -322,8 +454,7 @@ class efloat:
                 break
         return guess
 
-    @property
-    def log(self):
+    def log(self, base: "efloat") -> "efloat":
         if self.isZero:
             return self.arithm_ref.nInf.copy()
         if self.sign < 0:
@@ -332,19 +463,37 @@ class efloat:
             return self.convert_efloat(0)
 
         x = self.copy()
-        guess = self.convert_efloat(1)
+        _1 = self.convert_efloat("1")
+        base_system = self.arithm_ref.repr_base
 
-        # Newton iteration for log(x)
-        for _ in range(self.arithm_ref.nr_it):
-            guess = guess - (self ** guess - x) / (self ** guess)
-            if (self ** guess) == x:
-                break
-        return guess
+        def reduce(x: "efloat", base: "efloat"):
+            characteristic = 0
+            while x >= base:
+                x /= base
+                characteristic += 1
+            while x < _1:
+                x *= base
+                characteristic -= 1
+
+            return characteristic, x.copy()
+
+        characteristic, x = reduce(x, base)
+
+        if self.arithm_ref.repr_len <= 0:
+            return self.convert_efloat(str(characteristic))
+
+        mantissa = ""
+        for i in range(self.arithm_ref.repr_len):
+            x = x ** base_system
+            digit, x = reduce(x, base)
+            mantissa += str(digit)
+
+        return self.convert_efloat(f'{characteristic}.{mantissa}')
 
     @property
     def log2(self):
-        ln2 = self.convert_efloat(2).log  # ln(2) value in base e
-        return self.log / ln2
+        _2 = self.convert_efloat("2")
+        return self.log(base=_2)
 
     @nan_protect
     def __floordiv__(self, other: "efloat"):
@@ -478,32 +627,14 @@ class efloat:
         res = f"{sign}{intstr}{sep}{frac_str}"
         return res
 
-    def convert_efloat(self, value):
+    def convert_efloat(self, value, repr_base: int = None):
         if value == 0:
             return efloat(self.arithm_ref, 1, 0, [0] * self.arithm_ref.mantissa_len)
 
-        sign = -1 if value < 0 else 1
-        value = abs(value)
+        if repr_base is not None:
+            return self.arithm_ref.__call__(value, repr_base)
 
-        exponent = 0
-        while value >= self.arithm_ref.base:
-            value /= self.arithm_ref.base
-            exponent += 1
-
-        while value < 1:
-            value *= self.arithm_ref.base
-            exponent -= 1
-
-        mantissa = []
-        for _ in range(self.arithm_ref.mantissa_len):
-            digit = int(value)
-            mantissa.append(digit)
-            value = (value - digit) * self.arithm_ref.base
-
-        mantissa = self.arithm_ref.eround(sign, mantissa, self.arithm_ref.mantissa_len)
-        exponent, mantissa = self.arithm_ref.normalize(exponent, mantissa)
-
-        return efloat(self.arithm_ref, sign, exponent, mantissa)
+        return self.arithm_ref.__call__(value, self.arithm_ref.repr_base)
 
     def convert_int(self, repr_base: int = 10, sep: str = ".") -> int:
 
@@ -649,6 +780,8 @@ class Extended754:
 
         Normalizes the mantissa adjusting the exponent
         """
+        if exponent == 0 and mantissa == [0] * len(mantissa):
+            return exponent, mantissa
         while len(mantissa) and mantissa[0] == 0:
             mantissa.pop()
             exponent += 1
