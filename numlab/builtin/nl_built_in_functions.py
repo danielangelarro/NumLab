@@ -5,6 +5,7 @@ from time import sleep
 
 import numlab.exceptions as excpt
 from numlab.lang.type import Type
+from numlab.extended754 import efloat
 
 __BUILTINS = {}
 
@@ -48,7 +49,7 @@ def nl_abs(x: nl_float):
 
 @builtin_func("bin")
 def nl_bin(x: nl_int):
-    return nl_str(builtins.bin(x.get("value")))
+    return nl_str(x.get("value").convert_str(repr_base=2))
 
 
 @builtin_func("pow")
@@ -178,8 +179,9 @@ def nl_norm():
 
 @builtin_func("sqrt")
 def nl_sqrt(x):
-    return nl_float(math.sqrt(x.get("value")))
-
+    # return nl_float(math.sqrt(x.get("value")))
+    value: efloat = x.get("value")
+    return nl_float(value.sqrt)
 
 @builtin_func("sleep")
 def nl_sleep(x: nl_float):
@@ -188,17 +190,22 @@ def nl_sleep(x: nl_float):
 
 @builtin_func("log")
 def log(x, base):
-    return nl_float(math.log(x.get("value"), base.get("value")))
+    x: efloat = x.get("value")
+    base: efloat = base.get("value")
+    return nl_float(x.log(base))
 
 
 @builtin_func("log2")
 def log2(x):
-    return nl_float(math.log2(x.get("value")))
+    x: efloat = x.get("value")
+    return nl_float(x.log2)
 
 
 @builtin_func("exp")
 def exp(x):
-    return nl_float(math.exp(x.get("value")))
+    x: efloat = x.get("value")
+    e: efloat = x.convert_efloat(math.e)
+    return nl_float(e ** x)
 
 
 @builtin_func("ceil")
@@ -213,17 +220,20 @@ def floor(x):
 
 @builtin_func("sin")
 def sin(x):
-    return nl_float(math.sin(x.get("value")))
+    x: efloat = x.get("value")
+    return nl_float(x.sin)
 
 
 @builtin_func("cos")
 def cos(x):
-    return nl_int(math.cos(x.get("value")))
+    x: efloat = x.get("value")
+    return nl_float(x.cos)
 
 
 @builtin_func("tan")
 def tan(x):
-    return nl_int(math.tan(x.get("value")))
+    x: efloat = x.get("value")
+    return nl_float(x.tan)
 
 
 @builtin_func("montcar")

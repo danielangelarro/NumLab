@@ -1,13 +1,14 @@
 import numlab.exceptions as excpt
 from numlab.lang.type import Instance, Type
+from numlab.extended754 import efloat
 
 nl_int = Type.get("int")
 
 
 @nl_int.method("__new__")
-def nl__new__(value: float):
+def nl__new__(value: efloat):
     _inst = Instance(nl_int)
-    _inst.set("value", int(value))
+    _inst.set("value", value)
     return _inst
 
 

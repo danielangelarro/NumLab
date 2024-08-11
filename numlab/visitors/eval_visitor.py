@@ -8,6 +8,7 @@ from numlab import builtin
 from numlab.lang.context import Context
 from numlab.lang.type import Instance, Type
 from numlab.lang.visitor import Visitor
+from numlab.extended754 import Extended754
 import numlab.exceptions as excpt
 
 # pylint: disable=function-redefined
@@ -88,6 +89,12 @@ CONFIG_OPTS_VALIDATOR = {
     "max_gt_count": (builtin.nl_int,),
     "max_le_count": (builtin.nl_int,),
     "max_ge_count": (builtin.nl_int,),
+    "ieee754_base": (builtin.nl_int,),
+    "ieee754_exponent": (builtin.nl_int,),
+    "ieee754_mantissa": (builtin.nl_int,),
+    "ieee754_repr_base": (builtin.nl_int,),
+    "ieee754_round_nearest": (builtin.nl_bool,),
+    "ieee754_repr_len": (builtin.nl_int,),
     "call_time": (builtin.nl_float, builtin.nl_function),
     "assign_time": (builtin.nl_float, builtin.nl_function),
     "add_time": (builtin.nl_float, builtin.nl_function),
@@ -167,9 +174,41 @@ class EvalVisitor:
             "start_time": 0,
         }
         self.stats = {}
+        self.ieee754 = None
         self.reset_stats()
         self.configs = {}
         self.in_sim = []
+
+    @callback
+    def main_ieee754(self, node: ast.AST):
+        if not self.in_sim:
+            return
+        config = self.in_sim[-1]
+
+        ieee754_base = 2
+        ieee754_exponent = 11
+        ieee754_mantissa = 52
+        ieee754_repr_base = 10
+        ieee754_repr_len = 17
+
+        if "ieee754_base" in config:
+            ieee754_base = config["ieee754_base"].get("value")
+        if "ieee754_exponent" in config:
+            ieee754_exponent = config["ieee754_exponent"].get("value")
+        if "ieee754_mantissa" in config:
+            ieee754_mantissa = config["ieee754_mantissa"].get("value")
+        if "ieee754_repr_base" in config:
+            ieee754_repr_base = config["ieee754_repr_base"].get("value")
+        if "ieee754_repr_len" in config:
+            ieee754_repr_len = config["ieee754_repr_len"].get("value")
+
+        self.ieee754 = Extended754(
+            base=ieee754_base,
+            exponent=ieee754_exponent,
+            mantissa=ieee754_mantissa,
+            repr_base=ieee754_repr_base,
+            repr_len=ieee754_repr_len
+        )
 
     @callback
     def check_time_callback(self, node: ast.AST):
@@ -277,8 +316,14 @@ class EvalVisitor:
                 ("ge_count", 0),
                 ("and_count", 0),
                 ("or_count", 0),
+                ("ieee754_base", 2),
+                ("ieee754_exponent", 11),
+                ("ieee754_mantissa", 52),
+                ("ieee754_repr_base", 10),
+                ("ieee754_repr_len", 17),
             ]
         )
+        self.ieee754 = Extended754(base=2, exponent=11, mantissa=52, repr_base=10, repr_len=17)
 
     def set_stats(self, items: List[Tuple[str, Any]]):
         stats = self.resolve("stats")
@@ -403,6 +448,7 @@ class EvalVisitor:
                 "Expected: "
                 + repr([ct.type_name for ct in CONFIG_OPTS_VALIDATOR[node.name]])
             )
+        val.set("value", val.get("value").convert_int())
         self.configs[self.flags["current_config"]][node.name] = val
 
     @visitor
@@ -862,9 +908,11 @@ class EvalVisitor:
         if isinstance(node.value, bool):
             return builtin.nl_bool(node.value)
         if isinstance(node.value, int):
-            return builtin.nl_int(node.value)
+            base = self.ieee754(str(node.value), 10)
+            return builtin.nl_int(base)
         if isinstance(node.value, float):
-            return builtin.nl_float(node.value)
+            base = self.ieee754(str(node.value), 10)
+            return builtin.nl_float(base)
         if node.value is None:
             return builtin.nl_none()
         raise excpt.RuntimeError(f"Unsupported constant type {type(node.value)}")
